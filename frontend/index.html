@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LevelUp Planner</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-card">
+
+      <div class="logo">LevelUp Planner</div>
+      <p class="tagline">Turn your tasks into achievements</p>
+
+      <!-- Toggle buttons -->
+      <div class="auth-toggle">
+        <button id="login-tab" class="tab-btn active" onclick="showLogin()">Login</button>
+        <button id="register-tab" class="tab-btn" onclick="showRegister()">Register</button>
+      </div>
+
+      <!-- Login Form -->
+      <div id="login-form">
+        <input type="text" id="login-username" placeholder="Username" class="input"/>
+        <input type="password" id="login-password" placeholder="Password" class="input"/>
+        <button onclick="login()" class="btn-primary">Login</button>
+        <p id="login-error" class="error-msg"></p>
+      </div>
+
+      <!-- Register Form -->
+      <div id="register-form" style="display:none">
+        <input type="text" id="reg-username" placeholder="Choose a username" class="input"/>
+        <input type="password" id="reg-password" placeholder="Choose a password" class="input"/>
+        <button onclick="register()" class="btn-primary">Create Account</button>
+        <p id="register-error" class="error-msg"></p>
+        <p id="register-success" class="success-msg"></p>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    function showLogin() {
+      document.getElementById('login-form').style.display = 'block';
+      document.getElementById('register-form').style.display = 'none';
+      document.getElementById('login-tab').classList.add('active');
+      document.getElementById('register-tab').classList.remove('active');
+    }
+
+    function showRegister() {
+      document.getElementById('register-form').style.display = 'block';
+      document.getElementById('login-form').style.display = 'none';
+      document.getElementById('register-tab').classList.add('active');
+      document.getElementById('login-tab').classList.remove('active');
+    }
+
+    async function login() {
+      const username = document.getElementById('login-username').value;
+      const password = document.getElementById('login-password').value;
+      const result = await api.login({ username, password });
+      if (result.error) {
+        document.getElementById('login-error').textContent = result.error;
+      } else {
+        localStorage.setItem('token', result.token);
+        localStorage.setItem('user', JSON.stringify(result.user));
+        window.location.href = 'pages/dashboard.html';
+      }
+    }
+
+    async function register() {
+      const username = document.getElementById('reg-username').value;
+      const password = document.getElementById('reg-password').value;
+      const result = await api.register({ username, password });
+      if (result.error) {
+        document.getElementById('register-error').textContent = result.error;
+      } else {
+        document.getElementById('register-success').textContent = 'Account created! You can now login.';
+        showLogin();
+      }
+    }
+
+    // If already logged in, skip to dashboard
+    if (localStorage.getItem('token')) {
+      window.location.href = 'pages/dashboard.html';
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kanban — LevelUp</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+</head>
+<body>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="logo">LevelUp Planner</div>
+      <nav>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="tasks.html">My Tasks</a>
+        <a href="kanban.html" class="active">Kanban</a>
+        <a href="projects.html">Projects</a>
+        <a href="stats.html">Stats</a>
+      </nav>
+      <div class="username" id="sidebar-username"></div>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </aside>
+
+    <main class="content">
+
+      <div class="page-header">
+        <div class="page-title">Kanban Board</div>
+        <div class="level-card" style="padding:10px 18px; gap:12px;">
+          <div class="level-badge">Level <span id="level-num">1</span></div>
+          <div class="xp-bar-track" style="width:140px;">
+            <div class="xp-bar" id="xp-bar" style="width:0%"></div>
+          </div>
+          <span class="xp-label"><span id="xp-current">0</span> / 100 XP</span>
+        </div>
+      </div>
+
+      <p style="font-size:13px; color:var(--muted);">Drag tasks between columns to update their status.</p>
+
+      <!-- Kanban Board -->
+      <div class="kanban-board">
+
+        <!-- To Do -->
+        <div class="kanban-col">
+          <div class="kanban-col-title">To Do</div>
+          <div id="col-todo" data-status="todo" class="kanban-drop-zone">
+            <p class="empty" id="empty-todo">No tasks</p>
+          </div>
+        </div>
+
+        <!-- Doing -->
+        <div class="kanban-col">
+          <div class="kanban-col-title">Doing</div>
+          <div id="col-doing" data-status="doing" class="kanban-drop-zone">
+            <p class="empty" id="empty-doing">No tasks</p>
+          </div>
+        </div>
+
+        <!-- Done -->
+        <div class="kanban-col">
+          <div class="kanban-col-title">Done</div>
+          <div id="col-done" data-status="done" class="kanban-drop-zone">
+            <p class="empty" id="empty-done">No tasks</p>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    if (!localStorage.getItem('token')) window.location.href = '../index.html';
+
+    const user = JSON.parse(localStorage.getItem('user'));
+    document.getElementById('sidebar-username').textContent = user.username;
+    updateXPDisplay(user.xp);
+
+    async function loadKanban() {
+      const tasks = await api.getTasks();
+
+      const cols = { todo: [], doing: [], done: [] };
+      tasks.forEach(t => cols[t.status].push(t));
+
+      ['todo', 'doing', 'done'].forEach(status => {
+        const col = document.getElementById('col-' + status);
+        const empty = document.getElementById('empty-' + status);
+
+        // Clear existing cards but keep empty message
+        Array.from(col.querySelectorAll('.kanban-card')).forEach(c => c.remove());
+
+        if (cols[status].length === 0) {
+          empty.style.display = 'block';
+        } else {
+          empty.style.display = 'none';
+          cols[status].forEach(task => {
+            const card = document.createElement('div');
+            card.className = 'kanban-card';
+            card.dataset.taskId = task.task_id;
+            card.innerHTML = `
+              <div class="kanban-card-name">${task.task_name}</div>
+              <div class="task-meta">
+                <span class="badge badge-${task.priority}">${task.priority}</span>
+                <span style="font-size:11px; color:var(--green-dark); font-weight:500;">+${task.xp_reward} XP</span>
+              </div>
+            `;
+            col.appendChild(card);
+          });
+        }
+      });
+
+      initSortable();
+    }
+
+    function initSortable() {
+      ['todo', 'doing', 'done'].forEach(status => {
+        const col = document.getElementById('col-' + status);
+        Sortable.create(col, {
+          group: 'kanban',
+          animation: 150,
+          ghostClass: 'kanban-ghost',
+          onEnd: async (evt) => {
+            const taskId = evt.item.dataset.taskId;
+            const newStatus = evt.to.dataset.status;
+
+            const result = await api.updateStatus(taskId, newStatus);
+
+            // Update XP if task was completed by dragging to done
+            if (newStatus === 'done' && result.newXp !== undefined) {
+              user.xp = result.newXp;
+              localStorage.setItem('user', JSON.stringify(user));
+              updateXPDisplay(result.newXp);
+            }
+
+            // Refresh to update empty states
+            loadKanban();
+          }
+        });
+      });
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = '../index.html';
+    }
+
+    loadKanban();
+  </script>
+</body>
+</html>

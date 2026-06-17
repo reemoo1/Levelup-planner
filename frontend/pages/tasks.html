@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Tasks — LevelUp</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="logo">LevelUp Planner</div>
+      <nav>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="tasks.html" class="active">My Tasks</a>
+        <a href="kanban.html">Kanban</a>
+        <a href="projects.html">Projects</a>
+        <a href="stats.html">Stats</a>
+      </nav>
+      <div class="username" id="sidebar-username"></div>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </aside>
+
+    <main class="content">
+
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="page-title">My Tasks</div>
+        <div class="level-card" style="padding:10px 18px; gap:12px;">
+          <div class="level-badge">Level <span id="level-num">1</span></div>
+          <div class="xp-bar-track" style="width:140px;">
+            <div class="xp-bar" id="xp-bar" style="width:0%"></div>
+          </div>
+          <span class="xp-label"><span id="xp-current">0</span> / 100 XP</span>
+        </div>
+      </div>
+
+      <!-- Add Task Form -->
+      <div class="card">
+        <h2 style="margin-bottom:14px;">Add New Task</h2>
+        <div class="form-row">
+          <div class="form-group" style="flex:2;">
+            <label>Task Name</label>
+            <input type="text" id="task-name" class="input" placeholder="e.g. Study Chapter 4"/>
+          </div>
+          <div class="form-group">
+            <label>Priority</label>
+            <select id="task-priority" class="input">
+              <option value="easy">Easy (+10 XP)</option>
+              <option value="medium" selected>Medium (+25 XP)</option>
+              <option value="hard">Hard (+50 XP)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Due Date</label>
+            <input type="date" id="task-due" class="input"/>
+          </div>
+          <div class="form-group">
+            <label>Project (optional)</label>
+            <select id="task-project" class="input">
+              <option value="">No project</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-accent" style="margin-top:10px;" onclick="addTask()">Add Task</button>
+        <p id="task-msg" style="margin-top:8px; font-size:13px;"></p>
+      </div>
+
+      <!-- Filter Bar -->
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-accent" onclick="filterTasks('all')">All</button>
+        <button class="btn" onclick="filterTasks('todo')">To Do</button>
+        <button class="btn" onclick="filterTasks('doing')">Doing</button>
+        <button class="btn" onclick="filterTasks('done')">Done</button>
+        <button class="btn" onclick="filterTasks('easy')">Easy</button>
+        <button class="btn" onclick="filterTasks('medium')">Medium</button>
+        <button class="btn" onclick="filterTasks('hard')">Hard</button>
+      </div>
+
+      <!-- Task List -->
+      <section>
+        <div id="task-list" class="task-list">
+          <p class="empty">Loading...</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    if (!localStorage.getItem('token')) window.location.href = '../index.html';
+
+    const user = JSON.parse(localStorage.getItem('user'));
+    document.getElementById('sidebar-username').textContent = user.username;
+    updateXPDisplay(user.xp);
+
+    let allTasks = [];
+
+    async function loadTasks() {
+      allTasks = await api.getTasks();
+      renderTasks(allTasks);
+      loadProjects();
+    }
+
+    async function loadProjects() {
+      const projects = await api.getProjects();
+      const select = document.getElementById('task-project');
+      projects.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.project_id;
+        opt.textContent = p.project_name;
+        select.appendChild(opt);
+      });
+    }
+
+    function renderTasks(tasks) {
+      const container = document.getElementById('task-list');
+      container.innerHTML = '';
+
+      if (tasks.length === 0) {
+        container.innerHTML = '<p class="empty">No tasks found.</p>';
+        return;
+      }
+
+      tasks.forEach(task => {
+        const div = document.createElement('div');
+        div.className = 'task-item' + (task.status === 'done' ? ' completed' : '');
+        div.id = 'task-' + task.task_id;
+        div.innerHTML = `
+          <div class="task-info">
+            <span class="task-name">${task.task_name}</span>
+            <div class="task-meta">
+              <span class="badge badge-${task.priority}">${task.priority}</span>
+              <span class="badge badge-${task.status}">${task.status}</span>
+              ${task.due_date ? `<span style="font-size:12px; color:var(--muted);">Due: ${formatDate(task.due_date)}</span>` : ''}
+              <span style="font-size:12px; color:var(--green-dark); font-weight:500;">+${task.xp_reward} XP</span>
+            </div>
+          </div>
+          <div class="task-actions">
+            ${task.status !== 'done' ? `<button class="btn btn-accent" onclick="completeTask(${task.task_id}, this)">Complete</button>` : '<span style="color:var(--green-dark); font-size:13px; font-weight:500;">Done</span>'}
+            <button class="btn btn-danger" onclick="deleteTask(${task.task_id})">Delete</button>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function filterTasks(filter) {
+      if (filter === 'all') return renderTasks(allTasks);
+      const filtered = allTasks.filter(t =>
+        t.status === filter || t.priority === filter
+      );
+      renderTasks(filtered);
+    }
+
+    async function addTask() {
+      const name = document.getElementById('task-name').value.trim();
+      const priority = document.getElementById('task-priority').value;
+      const due = document.getElementById('task-due').value;
+      const project = document.getElementById('task-project').value;
+      const msg = document.getElementById('task-msg');
+
+      if (!name) {
+        msg.style.color = 'var(--pink-dark)';
+        msg.textContent = 'Please enter a task name.';
+        return;
+      }
+
+      const result = await api.createTask({
+        task_name: name,
+        priority,
+        due_date: due || null,
+        project_id: project || null
+      });
+
+      if (result.task_id) {
+        msg.style.color = 'var(--green-dark)';
+        msg.textContent = 'Task added!';
+        document.getElementById('task-name').value = '';
+        document.getElementById('task-due').value = '';
+        loadTasks();
+        setTimeout(() => msg.textContent = '', 2000);
+      }
+    }
+
+    async function completeTask(taskId, btn) {
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      const result = await api.updateStatus(taskId, 'done');
+      if (result.newXp !== undefined) {
+        user.xp = result.newXp;
+        localStorage.setItem('user', JSON.stringify(user));
+        updateXPDisplay(result.newXp);
+        loadTasks();
+      }
+    }
+
+    async function deleteTask(taskId) {
+      if (!confirm('Delete this task?')) return;
+      await api.deleteTask(taskId);
+      loadTasks();
+    }
+
+    function formatDate(dateStr) {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = '../index.html';
+    }
+
+    loadTasks();
+  </script>
+</body>
+</html>

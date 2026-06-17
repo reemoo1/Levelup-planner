@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Projects — LevelUp</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="logo">LevelUp Planner</div>
+      <nav>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="tasks.html">My Tasks</a>
+        <a href="kanban.html">Kanban</a>
+        <a href="projects.html" class="active">Projects</a>
+        <a href="stats.html">Stats</a>
+      </nav>
+      <div class="username" id="sidebar-username"></div>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </aside>
+
+    <main class="content">
+
+      <div class="page-header">
+        <div class="page-title">Projects</div>
+        <div class="level-card" style="padding:10px 18px; gap:12px;">
+          <div class="level-badge">Level <span id="level-num">1</span></div>
+          <div class="xp-bar-track" style="width:140px;">
+            <div class="xp-bar" id="xp-bar" style="width:0%"></div>
+          </div>
+          <span class="xp-label"><span id="xp-current">0</span> / 100 XP</span>
+        </div>
+      </div>
+
+      <!-- Add Project Form -->
+      <div class="card">
+        <h2 style="margin-bottom:14px;">Create New Project</h2>
+        <div class="form-row">
+          <div class="form-group" style="flex:2;">
+            <label>Project Name</label>
+            <input type="text" id="project-name" class="input" placeholder="e.g. Senior Project"/>
+          </div>
+          <div class="form-group" style="flex:3;">
+            <label>Description (optional)</label>
+            <input type="text" id="project-desc" class="input" placeholder="What is this project about?"/>
+          </div>
+        </div>
+        <button class="btn btn-accent" style="margin-top:10px;" onclick="addProject()">Create Project</button>
+        <p id="project-msg" style="margin-top:8px; font-size:13px;"></p>
+      </div>
+
+      <!-- Projects List -->
+      <section>
+        <div id="projects-list">
+          <p class="empty">Loading...</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    if (!localStorage.getItem('token')) window.location.href = '../index.html';
+
+    const user = JSON.parse(localStorage.getItem('user'));
+    document.getElementById('sidebar-username').textContent = user.username;
+    updateXPDisplay(user.xp);
+
+    let allTasks = [];
+
+    async function loadProjects() {
+      const [projects, tasks] = await Promise.all([
+        api.getProjects(),
+        api.getTasks()
+      ]);
+      allTasks = tasks;
+
+      const container = document.getElementById('projects-list');
+      container.innerHTML = '';
+
+      if (projects.length === 0) {
+        container.innerHTML = '<p class="empty">No projects yet — create one above.</p>';
+        return;
+      }
+
+      projects.forEach(project => {
+        const projectTasks = allTasks.filter(t => t.project_id === project.project_id);
+        const doneTasks = projectTasks.filter(t => t.status === 'done');
+        const progress = projectTasks.length > 0
+          ? Math.round((doneTasks.length / projectTasks.length) * 100)
+          : 0;
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.marginBottom = '14px';
+        card.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+            <div>
+              <div style="font-size:16px; font-weight:600; color:var(--text);">${project.project_name}</div>
+              ${project.description ? `<div style="font-size:13px; color:var(--muted); margin-top:3px;">${project.description}</div>` : ''}
+            </div>
+            <button class="btn btn-danger" onclick="deleteProject(${project.project_id})">Delete</button>
+          </div>
+
+          <!-- Progress bar -->
+          <div style="margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-bottom:6px;">
+              <span>${doneTasks.length} / ${projectTasks.length} tasks completed</span>
+              <span style="color:var(--green-dark); font-weight:500;">${progress}%</span>
+            </div>
+            <div class="xp-bar-track">
+              <div class="xp-bar" style="width:${progress}%; background:var(--green);"></div>
+            </div>
+          </div>
+
+          <!-- Project tasks -->
+          <div id="project-tasks-${project.project_id}">
+            ${projectTasks.length === 0
+              ? '<p style="font-size:13px; color:var(--muted);">No tasks in this project yet. Add tasks from the My Tasks page.</p>'
+              : projectTasks.map(t => `
+                <div class="task-item ${t.status === 'done' ? 'completed' : ''}" style="margin-bottom:6px;">
+                  <div class="task-info">
+                    <span class="task-name">${t.task_name}</span>
+                    <div class="task-meta">
+                      <span class="badge badge-${t.priority}">${t.priority}</span>
+                      <span class="badge badge-${t.status}">${t.status}</span>
+                    </div>
+                  </div>
+                  ${t.status !== 'done'
+                    ? `<button class="btn btn-accent" onclick="completeTask(${t.task_id}, this)">Complete</button>`
+                    : '<span style="color:var(--green-dark); font-size:13px; font-weight:500;">Done</span>'
+                  }
+                </div>
+              `).join('')
+            }
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    async function addProject() {
+      const name = document.getElementById('project-name').value.trim();
+      const desc = document.getElementById('project-desc').value.trim();
+      const msg = document.getElementById('project-msg');
+
+      if (!name) {
+        msg.style.color = 'var(--pink-dark)';
+        msg.textContent = 'Please enter a project name.';
+        return;
+      }
+
+      const result = await api.createProject({ project_name: name, description: desc });
+      if (result.project_id) {
+        msg.style.color = 'var(--green-dark)';
+        msg.textContent = 'Project created!';
+        document.getElementById('project-name').value = '';
+        document.getElementById('project-desc').value = '';
+        loadProjects();
+        setTimeout(() => msg.textContent = '', 2000);
+      }
+    }
+
+    async function deleteProject(projectId) {
+      if (!confirm('Delete this project? Tasks inside will not be deleted.')) return;
+      await api.deleteProject(projectId);
+      loadProjects();
+    }
+
+    async function completeTask(taskId, btn) {
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      const result = await api.updateStatus(taskId, 'done');
+      if (result.newXp !== undefined) {
+        user.xp = result.newXp;
+        localStorage.setItem('user', JSON.stringify(user));
+        updateXPDisplay(result.newXp);
+        loadProjects();
+      }
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = '../index.html';
+    }
+
+    loadProjects();
+  </script>
+</body>
+</html>

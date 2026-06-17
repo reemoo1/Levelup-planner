@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stats — LevelUp</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="logo">LevelUp Planner</div>
+      <nav>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="tasks.html">My Tasks</a>
+        <a href="kanban.html">Kanban</a>
+        <a href="projects.html">Projects</a>
+        <a href="stats.html" class="active">Stats</a>
+      </nav>
+      <div class="username" id="sidebar-username"></div>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </aside>
+
+    <main class="content">
+
+      <div class="page-header">
+        <div class="page-title">My Stats</div>
+        <div class="level-card" style="padding:10px 18px; gap:12px;">
+          <div class="level-badge">Level <span id="level-num">1</span></div>
+          <div class="xp-bar-track" style="width:140px;">
+            <div class="xp-bar" id="xp-bar" style="width:0%"></div>
+          </div>
+          <span class="xp-label"><span id="xp-current">0</span> / 100 XP</span>
+        </div>
+      </div>
+
+      <!-- Summary Cards -->
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px;">
+        <div class="card" style="text-align:center;">
+          <div style="font-size:13px; color:var(--muted); margin-bottom:6px;">Total Tasks</div>
+          <div id="stat-total" style="font-size:32px; font-weight:700; color:var(--text);">0</div>
+        </div>
+        <div class="card" style="text-align:center;">
+          <div style="font-size:13px; color:var(--muted); margin-bottom:6px;">Completed</div>
+          <div id="stat-done" style="font-size:32px; font-weight:700; color:var(--green-dark);">0</div>
+        </div>
+        <div class="card" style="text-align:center;">
+          <div style="font-size:13px; color:var(--muted); margin-bottom:6px;">In Progress</div>
+          <div id="stat-doing" style="font-size:32px; font-weight:700; color:#a07820;">0</div>
+        </div>
+        <div class="card" style="text-align:center;">
+          <div style="font-size:13px; color:var(--muted); margin-bottom:6px;">Total XP</div>
+          <div id="stat-xp" style="font-size:32px; font-weight:700; color:var(--pink-dark);">0</div>
+        </div>
+        <div class="card" style="text-align:center;">
+          <div style="font-size:13px; color:var(--muted); margin-bottom:6px;">Completion Rate</div>
+          <div id="stat-rate" style="font-size:32px; font-weight:700; color:var(--text);">0%</div>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+
+        <!-- Tasks by Priority -->
+        <div class="card">
+          <h2 style="margin-bottom:16px;">Tasks by Priority</h2>
+          <canvas id="priority-chart" height="200"></canvas>
+        </div>
+
+        <!-- Tasks by Status -->
+        <div class="card">
+          <h2 style="margin-bottom:16px;">Tasks by Status</h2>
+          <canvas id="status-chart" height="200"></canvas>
+        </div>
+
+      </div>
+
+      <!-- Weekly Activity -->
+      <div class="card">
+        <h2 style="margin-bottom:16px;">Tasks Completed This Week</h2>
+        <canvas id="weekly-chart" height="100"></canvas>
+      </div>
+
+      <!-- Achievements -->
+      <section>
+        <h2>Achievements</h2>
+        <div id="achievements-grid" class="achievements-grid"></div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    if (!localStorage.getItem('token')) window.location.href = '../index.html';
+
+    const user = JSON.parse(localStorage.getItem('user'));
+    document.getElementById('sidebar-username').textContent = user.username;
+    updateXPDisplay(user.xp);
+
+    async function loadStats() {
+      const [tasks, achievementsData] = await Promise.all([
+        api.getTasks(),
+        api.getAchievements()
+      ]);
+
+      // Summary numbers
+      const total   = tasks.length;
+      const done    = tasks.filter(t => t.status === 'done').length;
+      const doing   = tasks.filter(t => t.status === 'doing').length;
+      const rate    = total > 0 ? Math.round((done / total) * 100) : 0;
+
+      document.getElementById('stat-total').textContent = total;
+      document.getElementById('stat-done').textContent  = done;
+      document.getElementById('stat-doing').textContent = doing;
+      document.getElementById('stat-xp').textContent    = user.xp;
+      document.getElementById('stat-rate').textContent  = rate + '%';
+
+      // Priority chart
+      const easy   = tasks.filter(t => t.priority === 'easy').length;
+      const medium = tasks.filter(t => t.priority === 'medium').length;
+      const hard   = tasks.filter(t => t.priority === 'hard').length;
+
+      new Chart(document.getElementById('priority-chart'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Easy', 'Medium', 'Hard'],
+          datasets: [{
+            data: [easy, medium, hard],
+            backgroundColor: ['#b8dfc5', '#fde8a0', '#f5ccd9'],
+            borderColor: ['#a8d5b5', '#f5d060', '#f2b8cc'],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          plugins: { legend: { position: 'bottom' } },
+          cutout: '65%'
+        }
+      });
+
+      // Status chart
+      const todo = tasks.filter(t => t.status === 'todo').length;
+      new Chart(document.getElementById('status-chart'), {
+        type: 'doughnut',
+        data: {
+          labels: ['To Do', 'Doing', 'Done'],
+          datasets: [{
+            data: [todo, doing, done],
+            backgroundColor: ['#e8e8e8', '#fde8a0', '#b8dfc5'],
+            borderColor: ['#d0d0d0', '#f5d060', '#a8d5b5'],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          plugins: { legend: { position: 'bottom' } },
+          cutout: '65%'
+        }
+      });
+
+      // Weekly chart — last 7 days
+      const days = [];
+      const counts = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dayStr = d.toISOString().split('T')[0];
+        const label = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' });
+        days.push(label);
+        counts.push(tasks.filter(t =>
+          t.status === 'done' &&
+          t.completed_at &&
+          t.completed_at.split('T')[0] === dayStr
+        ).length);
+      }
+
+      new Chart(document.getElementById('weekly-chart'), {
+        type: 'bar',
+        data: {
+          labels: days,
+          datasets: [{
+            label: 'Tasks completed',
+            data: counts,
+            backgroundColor: '#b8dfc5',
+            borderColor: '#a8d5b5',
+            borderWidth: 1,
+            borderRadius: 6
+          }]
+        },
+        options: {
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { stepSize: 1 },
+              grid: { color: '#f0f0f0' }
+            },
+            x: { grid: { display: false } }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+
+      // Achievements
+      const grid = document.getElementById('achievements-grid');
+      grid.innerHTML = '';
+      achievementsData.all.forEach(a => {
+        const unlocked = achievementsData.unlocked.some(u => u.achievement_id === a.achievement_id);
+        const card = document.createElement('div');
+        card.className = 'achievement-card' + (unlocked ? ' unlocked' : '');
+        card.innerHTML = `
+          <div class="achievement-title">${a.title}</div>
+          <div class="achievement-desc">${a.description}</div>
+          ${unlocked ? '<div style="font-size:11px; color:var(--green-dark); margin-top:4px; font-weight:500;">Unlocked</div>' : ''}
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = '../index.html';
+    }
+
+    loadStats();
+  </script>
+</body>
+</html>
