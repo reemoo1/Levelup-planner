@@ -5,16 +5,20 @@ require('dotenv').config();
 const app = express();
 
 app.use(cors({
-  origin: ['https://levelup-planner-iota.vercel.app', 'http://localhost:5500'],
-  credentials: true
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+app.options('*', cors());
+
 app.use(express.json());
 
-app.use('/api/auth',     require('./routes/auth'));
-app.use('/api/tasks',    require('./routes/tasks'));
-app.use('/api/projects', require('./routes/projects'));
+app.use('/api/auth',         require('./routes/auth'));
+app.use('/api/tasks',        require('./routes/tasks'));
+app.use('/api/projects',     require('./routes/projects'));
 app.use('/api/achievements', require('./routes/achievements'));
-app.use('/api/stats', require('./routes/stats'));
+app.use('/api/stats',        require('./routes/stats'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'Server is running!' }));
 
