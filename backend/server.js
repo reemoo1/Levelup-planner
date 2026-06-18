@@ -4,7 +4,10 @@ require('dotenv').config();
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: ['https://levelup-planner-iota.vercel.app', 'http://localhost:5500'],
+  credentials: true
+}));
 app.use(express.json());
 
 app.use('/api/auth',     require('./routes/auth'));
